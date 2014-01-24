@@ -1,11 +1,10 @@
+username = ask 'Please input your database username:'
+growl = yes?("Use growl on OS X?")
 # DB: postgreSQL
 # Test framework: RSpec
 # test helper: Guard, Spring
 # CSS framework: bootstrap-sass
 #
-
-# remove gem sqlite3 from Gemfile
-gsub_file 'gemfile',/# Use sqlite3 as the database for Active Record\n.*'/, ''
 
 gem 'bootstrap-sass'
 gem 'bcrypt-ruby'
@@ -13,7 +12,6 @@ gem 'faker'
 gem 'will_paginate'
 gem 'bootstrap-will_paginate'
 gem 'jquery-turbolinks'
-gem 'pg'
 
 gem_group :development, :test do
   gem 'rspec-rails'
@@ -28,7 +26,7 @@ gem_group :test do
   gem 'cucumber-rails', :require => false
   gem 'database_cleaner', github: 'bmabey/database_cleaner'
 
-  gem 'growl' if yes?("Use growl on OS X?")
+  gem 'growl' if growl
 end
 
   gem_group :production do
@@ -58,6 +56,7 @@ run 'bundle exec guard init rspec'
 
 prepend_file 'guardfile', "require 'active_support/inflector'
 "
+append_file '.rspec', '--drb'
 
 gsub_file 'guardfile', /guard :rspec do/, <<'EOF'
 guard :rspec, cmd: 'spring rspec -f doc', all_after_pass: false do
@@ -129,3 +128,30 @@ end
 
 #{@app_name.classify}::Application.config.secret_key_base = secure_token
 EOF
+
+
+# database.yml
+# ------------------------------------
+gsub_file 'config/database.yml', /username:.*/, "username: #{username}"
+
+
+# notification center
+# ----------------------
+
+def send_to_notification_center(body,title, options={})
+  subtitle = options[:subtitle]
+  sound_name = options[:sound_name]
+  string = "display notification \"#{body}\" "
+  string << "with title \"#{title}\" "
+  string << "subtitle \"#{subtitle}\" "
+  string << "sound name \"#{sound_name}\" "
+
+  run "echo '#{string}' | osascript"
+end
+
+if growl
+  run "echo 'growlnotify -m #{body} -t #{title}' "
+else
+  send_to_notification_center("You can create anything now!", "Rails new finished.",
+                             subtitle: "your turn.", sound_name: "Frog")
+end
