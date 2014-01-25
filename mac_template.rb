@@ -1,10 +1,11 @@
-username = ask 'Please input your database username:'
-growl = yes?("Use growl on OS X?")
 # DB: postgreSQL
 # Test framework: RSpec
 # test helper: Guard, Spring
 # CSS framework: bootstrap-sass
-#
+
+
+username = ask 'Please input your database username:'
+growl = yes?("Use growl on OS X?")
 
 gem 'bootstrap-sass'
 gem 'bcrypt-ruby'
@@ -17,6 +18,7 @@ gem_group :development, :test do
   gem 'rspec-rails'
   gem 'guard-rspec'
   gem 'spring'
+  gem "spring-commands-rspec"
 end
 
 gem_group :test do
@@ -51,8 +53,11 @@ EOF
 # -------------------------------------------------
 
 remove_file 'test'
+
 run 'rails generate rspec:install'
 run 'bundle exec guard init rspec'
+
+add_file 'spec/features'
 
 prepend_file 'guardfile', "require 'active_support/inflector'
 "
@@ -131,12 +136,34 @@ EOF
 
 
 # database.yml
-# ------------------------------------
+# -----------------------------------------------
 gsub_file 'config/database.yml', /username:.*/, "username: #{username}"
 
+# basic settings
+# -----------------------------------------------
+
+git :init
+git add: "."
+git commit: "-m Initial commit"
+
+rake 'db:create'
+rake 'db:migrate'
+rake 'db:test:prepare'
+
+# Speed up tests by lowering bcrypt's cost function.
+# -----------------------------------------------
+
+injecting_string = <<EOF
+
+  # Speed up tests by lowering bcrypt's cost function.
+  ActiveModel::SecurePassword.min_cost = true
+
+EOF
+
+inject_into_file 'config/environments/test.rb', injecting_string, before: "end"
 
 # notification center
-# ----------------------
+# -----------------------------------------------
 
 def send_to_notification_center(body,title, options={})
   subtitle = options[:subtitle]
