@@ -49,19 +49,51 @@ gsub_file 'app/assets/javascripts/Application.js', %r{//= require jquery_ujs}, <
 //= require bootstrap
 EOF
 
-# RSpec and Guard
+# RSpec
 # -------------------------------------------------
 
 remove_file 'test'
 
 run 'rails generate rspec:install'
-run 'bundle exec guard init rspec'
-
-add_file 'spec/features'
-
-prepend_file 'guardfile', "require 'active_support/inflector'
-"
 append_file '.rspec', '--drb'
+
+inside 'spec' do
+  empty_directory 'controllers'
+  empty_directory 'features'
+end
+
+
+# add configuration to 'spec_helper.rb'
+factorygirl_settings =<<EOF
+
+  config.before(:all) do
+    FactoryGirl.reload
+  end
+
+
+EOF
+
+inject_into_file 'spec/spec_helper.rb', factorygirl_settings, before: /^end\s*\z/
+
+rspec_settings =<<EOF
+
+    config.generators do |g|
+      g.test_framework = "rspec"
+      g.controller_specs = false
+      g.helper_specs = false
+      g.view_specs = false
+    end
+
+EOF
+
+application rspec_settings
+
+
+# guard
+# ---------------------------------------------------
+
+run 'bundle exec guard init rspec'
+prepend_file 'guardfile', "require 'active_support/inflector'"
 
 gsub_file 'guardfile', /guard :rspec do/, <<'EOF'
 guard :rspec, cmd: 'spring rspec -f doc', all_after_pass: false do
@@ -82,6 +114,7 @@ guard :rspec, cmd: 'spring rspec -f doc', all_after_pass: false do
     "spec/requests/authentication_pages_spec.rb"
   end
 EOF
+
 
 # .gitignore
 # ----------------------------------------------
@@ -157,28 +190,30 @@ injecting_string = <<EOF
 
   # Speed up tests by lowering bcrypt's cost function.
   ActiveModel::SecurePassword.min_cost = true
-
 EOF
 
-inject_into_file 'config/environments/test.rb', injecting_string, before: "end"
+application injecting_string, env: 'test'
 
 # notification center
 # -----------------------------------------------
 
-def send_to_notification_center(body,title, options={})
+def notification(body,title, options={})
   subtitle = options[:subtitle]
   sound_name = options[:sound_name]
+  growl = options[:growl]
+
   string = "display notification \"#{body}\" "
   string << "with title \"#{title}\" "
   string << "subtitle \"#{subtitle}\" "
   string << "sound name \"#{sound_name}\" "
 
-  run "echo '#{string}' | osascript"
+  if growl
+    run "echo 'growlnotify -m #{body} -t #{title}' "
+  else
+    run "echo '#{string}' | osascript"
+  end
 end
 
-if growl
-  run "echo 'growlnotify -m #{body} -t #{title}' "
-else
-  send_to_notification_center("You can create anything now!", "Rails new finished.",
-                             subtitle: "your turn.", sound_name: "Frog")
-end
+
+notification("You can create anything now!", "Rails new finished.",
+              subtitle: "your turn.", sound_name: "Frog", growl: growl)
