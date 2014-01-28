@@ -3,11 +3,43 @@
 # test helper: Guard, Spring
 # CSS framework: bootstrap-sass
 
-
+# define variables and methods.
+# ------------------------------------
 username = ask 'Please input your database username:'
-growl = yes?("Use growl on OS X?")
+use_growl = yes?("Use growl on OS X?")
+use_bt_generators = yes?('Use bootstrap-generators instead of bootstrap-sass?')
+use_simple_form = yes?("Use simple_form?")
+use_devise = yes?("Use devise?")
 
-gem 'bootstrap-sass'
+
+def notification(body,title, options={sound_name: "Frog"})
+  subtitle = options[:subtitle]
+  sound_name = options[:sound_name]
+  use_growl = options[:use_growl]
+
+  string = "display notification \"#{body}\" "
+  string << "with title \"#{title}\" "
+  string << "subtitle \"#{subtitle}\" "
+  string << "sound name \"#{sound_name}\" "
+
+  if use_growl
+    run "echo 'growlnotify -m #{body} -t #{title}' "
+  else
+    run "echo '#{string}' | osascript"
+  end
+end
+
+# ---------------------------------------
+
+if use_bt_generators
+  gem 'bootstrap-generators', '~> 3.0.2'
+else
+  gem 'bootstrap-sass'
+end
+
+gem 'simple_form' if use_simple_form
+gem 'devise' if use_devise
+
 gem 'bcrypt-ruby'
 gem 'faker'
 gem 'will_paginate'
@@ -28,33 +60,61 @@ gem_group :test do
   gem 'cucumber-rails', :require => false
   gem 'database_cleaner', github: 'bmabey/database_cleaner'
 
-  gem 'growl' if growl
+  gem 'growl' if use_growl
 end
 
   gem_group :production do
     gem 'rails_12factor'
   end
 
+
+# --------------------------------------------
 run 'bundle install'
 
 # bootstrap(twitter)
-# ------------------------------------
-create_file 'app/assets/stylesheets/custom.css.scss' ,'@import "bootstrap";'
+# --------------------------------------------
+if use_bt_generators
+  generate 'bootstrap:install', '-f'
+else
+  create_file 'app/assets/stylesheets/custom.css.scss' ,'@import "bootstrap";'
+end
 
 # include necessary js files.
-# -------------------------------------------------
 gsub_file 'app/assets/javascripts/Application.js', %r{//= require jquery_ujs}, <<EOF
 //= require jquery.turbolinks
 //= require jquery_ujs
 //= require bootstrap
 EOF
 
+# simple_form
+# --------------------------------------------
+
+# remove bootstrap-generator side effect to prevent conflicts.
+remove_file 'lib/templates/erb/scaffold/_form.html.erb'
+
+simple_form_bootstrap_path = 'config/initializers/simple_form_bootstrap.rb'
+url_to_get = "https://gist.github.com/tokenvolt/6599141/raw/09d33083102c0e4bdde1049b321ea4ca66ff1ca0/simple_form_bootstrap3.rb"
+
+generate 'simple_form:install', '--bootstrap' if use_simple_form
+remove_file simple_form_bootstrap_path
+get url_to_get, simple_form_bootstrap_path
+
+set_btn_primary =<<EOF
+
+  # Default class for buttons
+  config.button_class = 'btn btn-primary'
+
+EOF
+
+inject_into_file simple_form_bootstrap_path, set_btn_primary, after: "SimpleForm.setup do |config|\n"
+
+
 # RSpec
 # -------------------------------------------------
 
 remove_file 'test'
 
-run 'rails generate rspec:install'
+generate 'rspec:install'
 append_file '.rspec', '--drb'
 
 inside 'spec' do
@@ -194,26 +254,19 @@ EOF
 
 application injecting_string, env: 'test'
 
+# devise
+# -----------------------------------------------
+if use_devise
+  generate 'devise:install'
+
+  host_in_development = "config.action_mailer.default_url_options = { :host => 'localhost:3000' }"
+  application host_in_development, env: 'development'
+
+  # modify flash to show devise's error message properly
+  gsub_file 'app/views/layouts/application.html.erb', 'name == :error', 'name == :alert'
+end
 # notification center
 # -----------------------------------------------
 
-def notification(body,title, options={})
-  subtitle = options[:subtitle]
-  sound_name = options[:sound_name]
-  growl = options[:growl]
-
-  string = "display notification \"#{body}\" "
-  string << "with title \"#{title}\" "
-  string << "subtitle \"#{subtitle}\" "
-  string << "sound name \"#{sound_name}\" "
-
-  if growl
-    run "echo 'growlnotify -m #{body} -t #{title}' "
-  else
-    run "echo '#{string}' | osascript"
-  end
-end
-
-
 notification("You can create anything now!", "Rails new finished.",
-              subtitle: "your turn.", sound_name: "Frog", growl: growl)
+              subtitle: "your turn.", use_growl: use_growl)
